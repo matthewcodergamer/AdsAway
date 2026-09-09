@@ -1,0 +1,20 @@
+html:not([data-adsaway-disabled="true"]) ins.adsbygoogle,
+html:not([data-adsaway-disabled="true"]) [data-ad-client],
+html:not([data-adsaway-disabled="true"]) [data-ad-slot],
+html:not([data-adsaway-disabled="true"]) [id^="google_ads_"],
+html:not([data-adsaway-disabled="true"]) [id*="google_ads_"],
+html:not([data-adsaway-disabled="true"]) iframe[src*="doubleclick.net"],
+html:not([data-adsaway-disabled="true"]) iframe[src*="googlesyndication.com"],
+html:not([data-adsaway-disabled="true"]) iframe[src*="adnxs.com"],
+html:not([data-adsaway-disabled="true"]) iframe[src*="popads.net"],
+html:not([data-adsaway-disabled="true"]) iframe[src*="popcash.net"],
+html:not([data-adsaway-disabled="true"]) iframe[src*="propellerads.com"],
+html:not([data-adsaway-disabled="true"]) iframe[src*="exoclick.com"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+}
