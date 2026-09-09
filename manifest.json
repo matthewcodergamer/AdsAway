@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AdsAway",
-  "version": "1.0.0",
-  "description": "Blocks intrusive ads, popups and video click-traps while keeping website controls usable.",
+  "version": "1.1.0",
+  "description": "Blocks intrusive ads, popups, embedded ads and YouTube ads while keeping website controls usable.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
@@ -57,6 +57,19 @@
       "run_at": "document_start",
       "all_frames": true,
       "match_origin_as_fallback": true,
+      "world": "ISOLATED"
+    },
+    {
+      "matches": [
+        "*://youtube.com/*",
+        "*://*.youtube.com/*",
+        "*://youtube-nocookie.com/*",
+        "*://*.youtube-nocookie.com/*"
+      ],
+      "js": ["youtube.js"],
+      "css": ["youtube.css"],
+      "run_at": "document_start",
+      "all_frames": true,
       "world": "ISOLATED"
     }
   ]
