@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
   "name": "AdsAway",
-  "version": "1.0.0",
-  "description": "Blocks intrusive ads, popups and video click-traps while keeping website controls usable.",
+  "short_name": "AdsAway",
+  "version": "1.1.0",
+  "description": "Blocks intrusive ads and popup networks without breaking normal website controls.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
@@ -17,10 +18,11 @@
     "type": "module"
   },
   "action": {
-    "default_title": "AdsAway",
+    "default_title": "AdsAway — Protection on",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
+      "24": "icons/icon24.png",
       "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
@@ -32,31 +34,35 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "homepage_url": "https://github.com/matthewcodergamer/AdsAway",
   "declarative_net_request": {
     "rule_resources": [
       {
-        "id": "adsaway_core",
+        "id": "adsaway_standard",
         "enabled": true,
         "path": "rules/core.json"
+      },
+      {
+        "id": "adsaway_enhanced",
+        "enabled": false,
+        "path": "rules/enhanced.json"
       }
     ]
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["page-guard.js"],
-      "run_at": "document_start",
-      "all_frames": true,
-      "match_origin_as_fallback": true,
-      "world": "MAIN"
-    },
-    {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
-      "css": ["content.css"],
-      "run_at": "document_start",
-      "all_frames": true,
-      "match_origin_as_fallback": true,
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false,
       "world": "ISOLATED"
     }
   ]

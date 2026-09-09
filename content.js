@@ -1,133 +1,137 @@
 (() => {
+  if (window.__adsAwaySafeContentLoaded) return;
+  window.__adsAwaySafeContentLoaded = true;
+
   const hostname = location.hostname.toLowerCase().replace(/^www\./, "");
-  const AD_HOSTS = [
-    "2mdn.net","a-ads.com","ad-maven.com","adform.net","adnxs.com","adroll.com",
-    "adskeeper.co.uk","adsterra.com","adsrvr.org","advertising.com","adxpremium.services",
-    "amazon-adsystem.com","bidswitch.net","bidvertiser.com","casalemedia.com","clickadu.com",
-    "clickaine.com","connatix.com","criteo.com","criteo.net","demdex.net","doubleclick.net",
-    "everesttech.net","evadav.com","exoclick.com","galaksion.com","googleadservices.com",
-    "googlesyndication.com","gumgum.com","highperformancecpm.com","highperformanceformat.com",
-    "hilltopads.com","hilltopads.net","indexexchange.com","juicyads.com","lijit.com","media.net",
-    "mgid.com","moatads.com","monetag.com","onclickalgo.com","onclickperformance.com",
-    "onclickprediction.com","openx.net","outbrain.com","popads.net","popcash.net",
-    "popmonetizer.net","propellerads.com","pubmatic.com","revcontent.com","richads.com",
-    "rubiconproject.com","scorecardresearch.com","sharethrough.com","smartadserver.com",
-    "spotxchange.com","taboola.com","teads.tv","trafficjunky.net","yieldmo.com","zedo.com"
+  const STANDARD_AD_HOSTS = [
+    "doubleclick.net","googlesyndication.com","googleadservices.com","adnxs.com","adsrvr.org",
+    "casalemedia.com","criteo.com","criteo.net","openx.net","pubmatic.com","rubiconproject.com",
+    "smartadserver.com","amazon-adsystem.com","scorecardresearch.com","moatads.com","taboola.com",
+    "outbrain.com","mgid.com","revcontent.com","propellerads.com","popads.net","popcash.net",
+    "exoclick.com","trafficjunky.net","juicyads.com","hilltopads.net","adsterra.com","monetag.com",
+    "clickadu.com"
+  ];
+  const ENHANCED_AD_HOSTS = [
+    "2mdn.net","a-ads.com","ad-maven.com","adform.net","adform.com","adroll.com","adskeeper.co.uk",
+    "advertising.com","adxpremium.services","bidswitch.net","bidvertiser.com","clickaine.com","demdex.net",
+    "everesttech.net","evadav.com","galaksion.com","gumgum.com","highperformancecpm.com",
+    "highperformanceformat.com","hilltopads.com","indexexchange.com","lijit.com","onclickalgo.com",
+    "onclickperformance.com","onclickprediction.com","popmonetizer.net","richads.com","sharethrough.com",
+    "spotxchange.com","yieldmo.com","zedo.com"
   ];
 
-  let enabled = true;
-  let clickTrapTimer = null;
-
-  const isAdHost = (url) => {
-    try {
-      const host = new URL(url, location.href).hostname.toLowerCase().replace(/^www\./, "");
-      return AD_HOSTS.some(ad => host === ad || host.endsWith(`.${ad}`));
-    } catch {
-      return false;
-    }
+  let state = {
+    active: true,
+    enhancedBlocking: false,
+    popupShield: true,
+    annoyanceCleanup: true
   };
 
-  async function refreshConfig() {
+  let observer = null;
+  let sweepTimer = null;
+
+  function hostFromUrl(value) {
+    try {
+      return new URL(value, location.href).hostname.toLowerCase().replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  }
+
+  function hostMatches(host, list) {
+    return list.some(domain => host === domain || host.endsWith(`.${domain}`));
+  }
+
+  function isKnownAdUrl(value) {
+    const host = hostFromUrl(value);
+    if (!host) return false;
+    if (hostMatches(host, STANDARD_AD_HOSTS)) return true;
+    return state.enhancedBlocking && hostMatches(host, ENHANCED_AD_HOSTS);
+  }
+
+  function report(key, amount = 1) {
+    chrome.runtime.sendMessage({ type: "report", key, amount }).catch(() => {});
+  }
+
+  async function refreshState() {
     const stored = await chrome.storage.local.get({
       globalEnabled: true,
-      strictPopups: true,
+      enhancedBlocking: false,
+      popupShield: true,
+      annoyanceCleanup: true,
       disabledSites: []
     });
     const disabledSites = Array.isArray(stored.disabledSites) ? stored.disabledSites : [];
-    enabled = stored.globalEnabled !== false && !disabledSites.includes(hostname);
-
-    const root = document.documentElement;
-    if (root) root.dataset.adsawayDisabled = enabled ? "false" : "true";
-
-    document.dispatchEvent(new CustomEvent("adsaway:config", {
-      detail: {
-        enabled,
-        strictPopups: stored.strictPopups !== false
-      }
-    }));
-
-    if (enabled) cleanDocument();
+    state = {
+      active: stored.globalEnabled !== false && !disabledSites.includes(hostname),
+      enhancedBlocking: stored.enhancedBlocking === true,
+      popupShield: stored.popupShield !== false,
+      annoyanceCleanup: stored.annoyanceCleanup !== false
+    };
+    document.documentElement?.toggleAttribute("data-adsaway-paused", !state.active);
+    if (state.active) scheduleSweep(0);
   }
 
-  function report(kind, amount = 1) {
-    chrome.runtime.sendMessage({ type: "reportBlocked", kind, amount }).catch(() => {});
-  }
+  function strongAntiAdblockMatch(element) {
+    if (!(element instanceof HTMLElement)) return false;
+    const text = (element.textContent || "").replace(/\s+/g, " ").trim().slice(0, 900).toLowerCase();
+    if (!text) return false;
+    if (!/(ad\s*block|adblocker|advertisement blocker)/i.test(text)) return false;
+    if (!/(disable|turn off|remove|whitelist|allow|detected|enabled)/i.test(text)) return false;
 
-  function isAntiAdblockOverlay(el) {
-    if (!(el instanceof HTMLElement)) return false;
-
-    const style = getComputedStyle(el);
+    const style = getComputedStyle(element);
     if (!["fixed", "sticky"].includes(style.position)) return false;
-
-    const rect = el.getBoundingClientRect();
-    const viewportArea = Math.max(1, innerWidth * innerHeight);
+    const rect = element.getBoundingClientRect();
     const area = Math.max(0, rect.width) * Math.max(0, rect.height);
-    if (area / viewportArea < 0.28) return false;
-
-    const z = Number.parseInt(style.zIndex, 10);
-    if (Number.isFinite(z) && z < 100) return false;
-
-    const text = (el.innerText || "").replace(/\s+/g, " ").trim().slice(0, 1200).toLowerCase();
-    return /(disable|turn off|remove|whitelist|allow).{0,45}(ad ?block|adblocker)|ad ?block(er)?.{0,45}(detected|enabled|active)/i.test(text);
+    return area >= innerWidth * innerHeight * 0.24;
   }
 
-  function restorePageScroll() {
-    const html = document.documentElement;
-    const body = document.body;
-    for (const node of [html, body]) {
-      if (!node) continue;
-      const style = getComputedStyle(node);
-      if (style.overflow === "hidden" || style.overflowY === "hidden") {
-        node.style.setProperty("overflow", "auto", "important");
-        node.style.setProperty("overflow-y", "auto", "important");
-      }
+  function clearBodyLockAfterOverlayRemoval() {
+    for (const element of [document.documentElement, document.body]) {
+      if (!element) continue;
+      if (element.style.overflow === "hidden") element.style.removeProperty("overflow");
+      if (element.style.overflowY === "hidden") element.style.removeProperty("overflow-y");
     }
   }
 
-  function cleanNode(node) {
-    if (!enabled || !(node instanceof Element)) return 0;
+  function cleanKnownAdFrames(root = document) {
     let removed = 0;
-
-    if (node.matches("iframe[src],script[src]") && isAdHost(node.getAttribute("src"))) {
-      node.remove();
-      return 1;
-    }
-
-    if (node.matches("[data-ad-client],[data-ad-slot],ins.adsbygoogle")) {
-      node.remove();
-      return 1;
-    }
-
-    if (isAntiAdblockOverlay(node)) {
-      node.remove();
-      restorePageScroll();
-      return 1;
-    }
-
-    for (const child of node.querySelectorAll?.("iframe[src],script[src],[data-ad-client],[data-ad-slot],ins.adsbygoogle") || []) {
-      if (
-        (child.matches("iframe[src],script[src]") && isAdHost(child.getAttribute("src"))) ||
-        child.matches("[data-ad-client],[data-ad-slot],ins.adsbygoogle")
-      ) {
-        child.remove();
+    const nodes = [];
+    if (root instanceof Element && root.matches("iframe[src],script[src]")) nodes.push(root);
+    if (root.querySelectorAll) nodes.push(...root.querySelectorAll("iframe[src],script[src]"));
+    for (const node of nodes) {
+      if (isKnownAdUrl(node.getAttribute("src") || "")) {
+        node.remove();
         removed++;
       }
     }
-
-    const candidates = node.querySelectorAll?.("div,section,aside,dialog") || [];
-    for (const candidate of candidates) {
-      if (isAntiAdblockOverlay(candidate)) {
-        candidate.remove();
-        removed++;
-      }
-    }
-
-    if (removed) restorePageScroll();
-    scheduleClickTrapSweep();
     return removed;
   }
 
-  function rectOverlapRatio(a, b) {
+  function cleanAntiAdblock(root = document) {
+    if (!state.annoyanceCleanup) return 0;
+    const selector = [
+      "[class*='adblock' i]",
+      "[id*='adblock' i]",
+      "[class*='anti-ad' i]",
+      "[id*='anti-ad' i]"
+    ].join(",");
+    const candidates = [];
+    if (root instanceof Element && root.matches(selector)) candidates.push(root);
+    if (root.querySelectorAll) candidates.push(...root.querySelectorAll(selector));
+
+    let removed = 0;
+    for (const element of candidates.slice(0, 80)) {
+      if (element.isConnected && strongAntiAdblockMatch(element)) {
+        element.remove();
+        removed++;
+      }
+    }
+    if (removed) clearBodyLockAfterOverlayRemoval();
+    return removed;
+  }
+
+  function overlapRatio(a, b) {
     const left = Math.max(a.left, b.left);
     const top = Math.max(a.top, b.top);
     const right = Math.min(a.right, b.right);
@@ -136,146 +140,91 @@
     return overlap / Math.max(1, b.width * b.height);
   }
 
-  function hasPlayerSemantics(el) {
-    const label = [
-      el.getAttribute?.("aria-label"),
-      el.getAttribute?.("title"),
-      el.id,
-      typeof el.className === "string" ? el.className : ""
-    ].filter(Boolean).join(" ").toLowerCase();
-    return /(player|video|controls?|play|pause|fullscreen|volume|seek|caption)/i.test(label);
-  }
+  function cleanKnownAdVideoLinks(root = document) {
+    if (!state.popupShield) return 0;
+    const anchors = [];
+    if (root instanceof HTMLAnchorElement && root.href) anchors.push(root);
+    if (root.querySelectorAll) anchors.push(...root.querySelectorAll("a[href]"));
+    const videos = [...document.querySelectorAll("video")].filter(video => {
+      const rect = video.getBoundingClientRect();
+      return rect.width >= 120 && rect.height >= 70;
+    });
+    if (!videos.length) return 0;
 
-  function isLikelyClickTrap(el, video) {
-    if (!(el instanceof HTMLElement) || !el.isConnected) return false;
-    if (el === video || el.contains(video) || video.contains(el)) return false;
-    if (el.dataset.adsawayClicktrap === "disabled") return false;
-    if (hasPlayerSemantics(el)) return false;
-    if (el.querySelector?.("button,[role='button'],input,select,video,audio")) return false;
-
-    const style = getComputedStyle(el);
-    if (style.pointerEvents === "none" || style.visibility === "hidden" || style.display === "none") return false;
-    if (!["absolute", "fixed", "sticky"].includes(style.position)) return false;
-
-    const vr = video.getBoundingClientRect();
-    const er = el.getBoundingClientRect();
-    if (!vr.width || !vr.height || rectOverlapRatio(er, vr) < 0.45) return false;
-
-    const z = Number.parseInt(style.zIndex, 10);
-    if (Number.isFinite(z) && z < 2) return false;
-
-    const anchor = el.matches("a[href]") ? el : null;
-    if (anchor) {
-      try {
-        const dest = new URL(anchor.href, location.href);
-        if (dest.origin !== location.origin) return true;
-      } catch {}
-    }
-
-    const inlineHandler = ["onclick", "onmousedown", "onmouseup", "onpointerdown"]
-      .some(name => el.hasAttribute(name));
-    const dataTarget = ["data-href", "data-url", "data-link", "data-target"]
-      .some(name => el.hasAttribute(name));
-    const text = (el.innerText || "").replace(/\s+/g, " ").trim();
-    const visuallyEmpty = !text && style.backgroundImage === "none";
-    const nearlyInvisible = Number(style.opacity || "1") <= 0.15;
-
-    return (inlineHandler || dataTarget) && (visuallyEmpty || nearlyInvisible);
-  }
-
-  function disableClickTrap(el) {
-    if (!(el instanceof HTMLElement) || el.dataset.adsawayClicktrap === "disabled") return false;
-    el.dataset.adsawayClicktrap = "disabled";
-    el.style.setProperty("pointer-events", "none", "important");
-    return true;
-  }
-
-  function cleanVideoClickTraps() {
-    if (!enabled || !document.elementsFromPoint) return 0;
     let disabled = 0;
-
-    for (const video of document.querySelectorAll("video")) {
-      const r = video.getBoundingClientRect();
-      if (r.width < 80 || r.height < 45 || r.bottom <= 0 || r.right <= 0 || r.top >= innerHeight || r.left >= innerWidth) continue;
-
-      const points = [
-        [r.left + r.width * 0.50, r.top + r.height * 0.50],
-        [r.left + r.width * 0.15, r.top + r.height * 0.50],
-        [r.left + r.width * 0.85, r.top + r.height * 0.50],
-        [r.left + r.width * 0.50, r.top + r.height * 0.82],
-        [r.left + r.width * 0.88, r.top + r.height * 0.88]
-      ];
-
-      for (const [x, y] of points) {
-        if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue;
-        const stack = document.elementsFromPoint(x, y);
-        for (const el of stack) {
-          if (el === video || el.contains(video)) break;
-          if (isLikelyClickTrap(el, video) && disableClickTrap(el)) {
-            disabled++;
-          }
-        }
-      }
+    for (const anchor of anchors.slice(0, 300)) {
+      if (!anchor.isConnected || !isKnownAdUrl(anchor.href)) continue;
+      const style = getComputedStyle(anchor);
+      if (!["absolute", "fixed", "sticky"].includes(style.position)) continue;
+      const rect = anchor.getBoundingClientRect();
+      const coversVideo = videos.some(video => overlapRatio(rect, video.getBoundingClientRect()) >= 0.35);
+      if (!coversVideo) continue;
+      anchor.dataset.adsawayClicktrap = "1";
+      anchor.style.setProperty("pointer-events", "none", "important");
+      disabled++;
     }
-
     return disabled;
   }
 
-  function scheduleClickTrapSweep() {
-    if (!enabled || clickTrapTimer) return;
-    clickTrapTimer = setTimeout(() => {
-      clickTrapTimer = null;
-      const count = cleanVideoClickTraps();
-      if (count) report("overlays", count);
-    }, 100);
+  function runSweep(root = document) {
+    if (!state.active) return;
+    const overlays = cleanKnownAdFrames(root) + cleanAntiAdblock(root);
+    const clickTraps = cleanKnownAdVideoLinks(root);
+    if (overlays) report("overlays", overlays);
+    if (clickTraps) report("clickTraps", clickTraps);
   }
 
-  function cleanDocument() {
-    if (!enabled) return;
-    const target = document.documentElement || document;
-    const removed = cleanNode(target);
-    if (removed) report("overlays", removed);
-    scheduleClickTrapSweep();
+  function scheduleSweep(delay = 120) {
+    if (!state.active || sweepTimer) return;
+    sweepTimer = setTimeout(() => {
+      sweepTimer = null;
+      runSweep(document);
+    }, delay);
   }
-
-  const observer = new MutationObserver((mutations) => {
-    if (!enabled) return;
-    let removed = 0;
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node instanceof Element) removed += cleanNode(node);
-      }
-    }
-    if (removed) report("overlays", removed);
-    scheduleClickTrapSweep();
-  });
 
   function startObserver() {
-    const target = document.documentElement || document;
-    observer.observe(target, { childList: true, subtree: true });
+    if (observer) return;
+    observer = new MutationObserver(mutations => {
+      if (!state.active) return;
+      let touched = false;
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          if (
+            node.matches?.("iframe[src],script[src],a[href],[class*='adblock' i],[id*='adblock' i],[class*='anti-ad' i],[id*='anti-ad' i]") ||
+            node.querySelector?.("iframe[src],script[src],a[href],[class*='adblock' i],[id*='adblock' i],[class*='anti-ad' i],[id*='anti-ad' i]")
+          ) {
+            touched = true;
+            break;
+          }
+        }
+        if (touched) break;
+      }
+      if (touched) scheduleSweep(180);
+    });
+    observer.observe(document.documentElement || document, { childList: true, subtree: true });
   }
 
-  document.addEventListener("adsaway:blocked", () => {
-    if (enabled) report("popups", 1);
+  document.addEventListener("click", event => {
+    if (!state.active || !state.popupShield || !event.isTrusted) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const anchor = target?.closest("a[href]");
+    if (!anchor || !isKnownAdUrl(anchor.href)) return;
+    if (anchor.dataset.adsawayClicktrap === "1") {
+      event.preventDefault();
+      event.stopPropagation();
+      report("clickTraps", 1);
+    }
+  }, true);
+
+  chrome.runtime.onMessage.addListener(message => {
+    if (message?.type === "stateChanged") refreshState().catch(() => {});
   });
 
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type === "stateChanged") refreshConfig().catch(() => {});
+  refreshState().then(() => {
+    startObserver();
+    scheduleSweep(0);
+  }).catch(() => {
+    startObserver();
   });
-
-  refreshConfig().catch(() => {});
-  startObserver();
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      refreshConfig().catch(() => {});
-      cleanDocument();
-      scheduleClickTrapSweep();
-    }, { once: true });
-  } else {
-    cleanDocument();
-  }
-
-  addEventListener("load", scheduleClickTrapSweep, { once: true });
-  addEventListener("resize", scheduleClickTrapSweep, { passive: true });
 })();

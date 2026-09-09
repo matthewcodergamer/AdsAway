@@ -1,4 +1,4 @@
-name: Package Chrome extension
+name: Validate and package AdsAway
 
 on:
   push:
@@ -14,27 +14,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate extension
+      - name: Validate JSON
         run: |
           python -m json.tool manifest.json >/dev/null
           python -m json.tool rules/core.json >/dev/null
+          python -m json.tool rules/enhanced.json >/dev/null
+
+      - name: Validate JavaScript
+        run: |
           node --check background.js
-          node --check page-guard.js
           node --check content.js
           node --check popup.js
 
-      - name: Build ZIP
+      - name: Verify required extension files
+        run: |
+          test -s manifest.json
+          test -s background.js
+          test -s content.js
+          test -s content.css
+          test -s popup.html
+          test -s popup.css
+          test -s popup.js
+          test -s rules/core.json
+          test -s rules/enhanced.json
+          for f in icons/icon16.png icons/icon24.png icons/icon32.png icons/icon48.png icons/icon128.png; do test -s "$f"; done
+
+      - name: Build installable ZIP
         run: |
           rm -rf dist
           mkdir -p dist/AdsAway
-          cp manifest.json background.js page-guard.js content.js content.css popup.html popup.css popup.js README.md LICENSE dist/AdsAway/
+          cp manifest.json background.js content.js content.css popup.html popup.css popup.js README.md LICENSE dist/AdsAway/
           cp -R icons rules dist/AdsAway/
           cd dist
-          zip -r AdsAway-Chrome-v1.0.0.zip AdsAway
+          zip -r AdsAway-Chrome-v1.1.0.zip AdsAway
+
+      - name: Verify ZIP
+        run: unzip -t dist/AdsAway-Chrome-v1.1.0.zip
 
       - name: Upload installable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: AdsAway-Chrome-v1.0.0
-          path: dist/AdsAway-Chrome-v1.0.0.zip
-          if-no-files-found: error
+          name: AdsAway-Chrome-v1.1.0
+          path: dist/AdsAway-Chrome-v1.1.0.zip

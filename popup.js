@@ -1,17 +1,26 @@
 let currentTab = null;
-let host = "";
-let state = null;
+let currentState = null;
+let currentHost = "";
+let toastTimer = null;
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
-function normalizeHost(value = "") {
-  return value.toLowerCase().replace(/^www\./, "");
+function showToast(message) {
+  const toast = $("toast");
+  toast.textContent = message;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, 1900);
 }
 
-function setProtectionUI(protectedNow) {
-  document.body.dataset.protection = protectedNow ? "active" : "paused";
-  const label = $("protectionLabel");
-  if (label) label.textContent = protectedNow ? "Protected" : "Paused";
+function hostFromUrl(urlString = "") {
+  try {
+    const url = new URL(urlString);
+    if (!/^https?:$/.test(url.protocol)) return "";
+    return url.hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
 }
 
 async function getActiveTab() {
@@ -19,75 +28,155 @@ async function getActiveTab() {
   return tab || null;
 }
 
-async function refresh() {
-  currentTab = await getActiveTab();
-  try {
-    host = currentTab?.url ? normalizeHost(new URL(currentTab.url).hostname) : "";
-  } catch {
-    host = "";
-  }
-
-  const response = await chrome.runtime.sendMessage({
-    type: "getState",
-    tabId: currentTab?.id,
-    host
-  });
-
-  if (!response?.ok) {
-    document.body.dataset.protection = "paused";
-    $("statusText").textContent = "Unable to read protection status";
-    return;
-  }
-
-  state = response;
-
-  $("globalToggle").checked = state.settings.globalEnabled;
-  $("strictToggle").checked = state.settings.strictPopups;
-  $("siteLabel").textContent = host || "This page";
-
-  const protectedNow = state.settings.globalEnabled && !state.siteDisabled;
-  setProtectionUI(protectedNow);
-
-  $("statusText").textContent = protectedNow ? "Protection is active" : "Protection is paused";
-  $("siteState").textContent = protectedNow
-    ? "Ads and popups are being blocked"
-    : "AdsAway is not filtering this site";
-  $("siteToggle").textContent = state.siteDisabled ? "Enable on this site" : "Disable on this site";
-  $("siteToggle").disabled = !host;
-
-  $("popupCount").textContent = state.stats.popups || 0;
-  $("overlayCount").textContent = state.stats.overlays || 0;
-  $("tabCount").textContent = state.stats.suspiciousTabs || 0;
+async function send(message) {
+  const response = await chrome.runtime.sendMessage(message);
+  if (!response?.ok) throw new Error(response?.error || "AdsAway could not complete that action");
+  return response;
 }
 
-$("globalToggle").addEventListener("change", async (event) => {
-  await chrome.runtime.sendMessage({ type: "toggleGlobal", enabled: event.target.checked });
-  await refresh();
-});
+function render() {
+  if (!currentState) return;
+  const settings = currentState.settings;
+  const active = currentState.active;
+  const siteDisabled = currentState.siteDisabled;
+  const normalWebPage = !!currentHost;
 
-$("strictToggle").addEventListener("change", async (event) => {
-  await chrome.runtime.sendMessage({ type: "toggleStrictPopups", enabled: event.target.checked });
-  await refresh();
-});
+  $("globalToggle").checked = settings.globalEnabled;
+  $("popupToggle").checked = settings.popupShield;
+  $("cleanupToggle").checked = settings.annoyanceCleanup;
+  $("enhancedToggle").checked = settings.enhancedBlocking;
 
-$("siteToggle").addEventListener("click", async () => {
-  if (!host || !state) return;
-  await chrome.runtime.sendMessage({
-    type: "toggleSite",
-    host,
-    disabled: !state.siteDisabled
+  const hero = $("hero");
+  hero.classList.toggle("paused", !active);
+  hero.classList.toggle("active", active);
+  $("heroIcon").src = "icons/icon128.png";
+
+  if (!settings.globalEnabled) {
+    $("statusEyebrow").textContent = "PROTECTION PAUSED";
+    $("statusTitle").textContent = "AdsAway is turned off";
+    $("statusDetail").textContent = "Turn protection back on when you want AdsAway to filter websites again.";
+  } else if (siteDisabled) {
+    $("statusEyebrow").textContent = "SITE BYPASSED";
+    $("statusTitle").textContent = "This website is untouched";
+    $("statusDetail").textContent = "AdsAway is paused only here so the site can load exactly as it normally would.";
+  } else {
+    $("statusEyebrow").textContent = "PROTECTION ACTIVE";
+    $("statusTitle").textContent = "AdsAway is protecting this page";
+    $("statusDetail").textContent = settings.enhancedBlocking
+      ? "Enhanced mode is active. If a site behaves strangely, switch it off or pause AdsAway for that site."
+      : "Standard mode blocks high-confidence ad networks without changing website JavaScript.";
+  }
+
+  $("siteName").textContent = normalWebPage ? currentHost : "Chrome internal page";
+  $("siteHint").textContent = normalWebPage
+    ? (siteDisabled ? "AdsAway is paused on this domain" : "Compatibility-safe protection")
+    : "Extensions cannot filter this Chrome page";
+
+  const siteButton = $("siteToggle");
+  siteButton.disabled = !normalWebPage;
+  siteButton.textContent = siteDisabled ? "Resume here" : "Pause here";
+  siteButton.classList.toggle("resume", siteDisabled);
+
+  $("popupCount").textContent = currentState.stats?.popupTabs || 0;
+  $("overlayCount").textContent = currentState.stats?.overlays || 0;
+  $("trapCount").textContent = currentState.stats?.clickTraps || 0;
+
+  $("toolbarCard").hidden = currentState.toolbarPinned !== false;
+}
+
+async function refresh() {
+  currentTab = await getActiveTab();
+  currentHost = hostFromUrl(currentTab?.url || "");
+  currentState = await send({
+    type: "getState",
+    tabId: currentTab?.id,
+    url: currentTab?.url || ""
   });
-  await refresh();
+  render();
+}
+
+async function withBusy(element, action) {
+  element.disabled = true;
+  try {
+    await action();
+  } catch (error) {
+    showToast(error.message || "Something went wrong");
+  } finally {
+    element.disabled = false;
+  }
+}
+
+$("globalToggle").addEventListener("change", event => {
+  withBusy(event.currentTarget, async () => {
+    await send({ type: "setGlobalEnabled", enabled: event.currentTarget.checked });
+    await refresh();
+    showToast(event.currentTarget.checked ? "Protection turned on" : "Protection paused");
+  });
 });
 
-$("resetStats").addEventListener("click", async () => {
-  if (!currentTab?.id) return;
-  await chrome.runtime.sendMessage({ type: "resetTabStats", tabId: currentTab.id });
-  await refresh();
+$("popupToggle").addEventListener("change", event => {
+  withBusy(event.currentTarget, async () => {
+    await send({ type: "setPopupShield", enabled: event.currentTarget.checked });
+    await refresh();
+    showToast(event.currentTarget.checked ? "Popup shield on" : "Popup shield off");
+  });
 });
 
-refresh().catch((error) => {
-  console.error(error);
-  document.body.dataset.protection = "paused";
-  $("statusText").textContent = "Protection status unavailable";
+$("cleanupToggle").addEventListener("change", event => {
+  withBusy(event.currentTarget, async () => {
+    await send({ type: "setAnnoyanceCleanup", enabled: event.currentTarget.checked });
+    await refresh();
+    showToast(event.currentTarget.checked ? "Overlay cleanup on" : "Overlay cleanup off");
+  });
+});
+
+$("enhancedToggle").addEventListener("change", event => {
+  withBusy(event.currentTarget, async () => {
+    await send({ type: "setEnhancedBlocking", enabled: event.currentTarget.checked });
+    await refresh();
+    showToast(event.currentTarget.checked ? "Enhanced blocking on" : "Back to Standard mode");
+  });
+});
+
+$("siteToggle").addEventListener("click", event => {
+  withBusy(event.currentTarget, async () => {
+    if (!currentHost) return;
+    const disabling = !currentState.siteDisabled;
+    await send({ type: "setSiteDisabled", host: currentHost, disabled: disabling });
+    showToast(disabling ? "AdsAway paused here — reloading" : "AdsAway resumed — reloading");
+    if (currentTab?.id) {
+      setTimeout(() => chrome.tabs.reload(currentTab.id).catch(() => {}), 120);
+      setTimeout(() => window.close(), 260);
+    }
+  });
+});
+
+$("resetStats").addEventListener("click", event => {
+  withBusy(event.currentTarget, async () => {
+    await send({ type: "resetTabStats", tabId: currentTab?.id });
+    await refresh();
+    showToast("Tab counters reset");
+  });
+});
+
+$("reloadButton").addEventListener("click", async () => {
+  if (currentTab?.id) {
+    await chrome.tabs.reload(currentTab.id).catch(() => {});
+    window.close();
+  }
+});
+
+$("resetButton").addEventListener("click", event => {
+  withBusy(event.currentTarget, async () => {
+    await send({ type: "resetRecommended" });
+    await refresh();
+    showToast("Recommended compatibility settings restored");
+  });
+});
+
+refresh().catch(error => {
+  $("statusEyebrow").textContent = "ADS AWAY";
+  $("statusTitle").textContent = "Extension loaded";
+  $("statusDetail").textContent = "Open a normal website to manage protection for that page.";
+  showToast(error.message || "Could not read this Chrome page");
 });

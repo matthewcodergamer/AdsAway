@@ -1,20 +1,10 @@
-html:not([data-adsaway-disabled="true"]) ins.adsbygoogle,
-html:not([data-adsaway-disabled="true"]) [data-ad-client],
-html:not([data-adsaway-disabled="true"]) [data-ad-slot],
-html:not([data-adsaway-disabled="true"]) [id^="google_ads_"],
-html:not([data-adsaway-disabled="true"]) [id*="google_ads_"],
-html:not([data-adsaway-disabled="true"]) iframe[src*="doubleclick.net"],
-html:not([data-adsaway-disabled="true"]) iframe[src*="googlesyndication.com"],
-html:not([data-adsaway-disabled="true"]) iframe[src*="adnxs.com"],
-html:not([data-adsaway-disabled="true"]) iframe[src*="popads.net"],
-html:not([data-adsaway-disabled="true"]) iframe[src*="popcash.net"],
-html:not([data-adsaway-disabled="true"]) iframe[src*="propellerads.com"],
-html:not([data-adsaway-disabled="true"]) iframe[src*="exoclick.com"] {
+html:not([data-adsaway-paused]) ins.adsbygoogle,
+html:not([data-adsaway-paused]) [data-ad-client][data-ad-slot],
+html:not([data-adsaway-paused]) iframe[src*="doubleclick.net"],
+html:not([data-adsaway-paused]) iframe[src*="googlesyndication.com"],
+html:not([data-adsaway-paused]) iframe[src*="popads.net"],
+html:not([data-adsaway-paused]) iframe[src*="popcash.net"],
+html:not([data-adsaway-paused]) iframe[src*="exoclick.com"],
+html:not([data-adsaway-paused]) iframe[src*="propellerads.com"] {
   display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-  width: 0 !important;
-  height: 0 !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
 }
