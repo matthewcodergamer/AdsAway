@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AdsAway",
   "version": "1.0.0",
-  "description": "Blocks intrusive ads, popups and ad overlays while keeping website controls usable.",
+  "description": "Blocks intrusive ads, popups and video click-traps while keeping website controls usable.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
