@@ -1,4 +1,3 @@
-
 let currentTab = null;
 let host = "";
 let state = null;
@@ -7,6 +6,12 @@ const $ = (id) => document.getElementById(id);
 
 function normalizeHost(value = "") {
   return value.toLowerCase().replace(/^www\./, "");
+}
+
+function setProtectionUI(protectedNow) {
+  document.body.dataset.protection = protectedNow ? "active" : "paused";
+  const label = $("protectionLabel");
+  if (label) label.textContent = protectedNow ? "Protected" : "Paused";
 }
 
 async function getActiveTab() {
@@ -28,7 +33,12 @@ async function refresh() {
     host
   });
 
-  if (!response?.ok) return;
+  if (!response?.ok) {
+    document.body.dataset.protection = "paused";
+    $("statusText").textContent = "Unable to read protection status";
+    return;
+  }
+
   state = response;
 
   $("globalToggle").checked = state.settings.globalEnabled;
@@ -36,8 +46,12 @@ async function refresh() {
   $("siteLabel").textContent = host || "This page";
 
   const protectedNow = state.settings.globalEnabled && !state.siteDisabled;
+  setProtectionUI(protectedNow);
+
   $("statusText").textContent = protectedNow ? "Protection is active" : "Protection is paused";
-  $("siteState").textContent = protectedNow ? "Ads and popups are being blocked" : "AdsAway is not filtering this site";
+  $("siteState").textContent = protectedNow
+    ? "Ads and popups are being blocked"
+    : "AdsAway is not filtering this site";
   $("siteToggle").textContent = state.siteDisabled ? "Enable on this site" : "Disable on this site";
   $("siteToggle").disabled = !host;
 
@@ -72,4 +86,8 @@ $("resetStats").addEventListener("click", async () => {
   await refresh();
 });
 
-refresh().catch(console.error);
+refresh().catch((error) => {
+  console.error(error);
+  document.body.dataset.protection = "paused";
+  $("statusText").textContent = "Protection status unavailable";
+});
