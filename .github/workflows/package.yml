@@ -1,0 +1,40 @@
+name: Package Chrome extension
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate extension
+        run: |
+          python -m json.tool manifest.json >/dev/null
+          python -m json.tool rules/core.json >/dev/null
+          node --check background.js
+          node --check page-guard.js
+          node --check content.js
+          node --check popup.js
+
+      - name: Build ZIP
+        run: |
+          rm -rf dist
+          mkdir -p dist/AdsAway
+          cp manifest.json background.js page-guard.js content.js content.css popup.html popup.css popup.js README.md LICENSE dist/AdsAway/
+          cp -R icons rules dist/AdsAway/
+          cd dist
+          zip -r AdsAway-Chrome-v1.0.0.zip AdsAway
+
+      - name: Upload installable ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: AdsAway-Chrome-v1.0.0
+          path: dist/AdsAway-Chrome-v1.0.0.zip
+          if-no-files-found: error
