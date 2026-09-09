@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AdsAway</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="brand-row">
+      <div class="brand">
+        <img src="icons/icon48.png" alt="" width="38" height="38">
+        <div>
+          <h1>AdsAway</h1>
+          <p id="statusText">Checking protection…</p>
+        </div>
+      </div>
+      <label class="switch" aria-label="Toggle AdsAway">
+        <input id="globalToggle" type="checkbox">
+        <span class="slider"></span>
+      </label>
+    </header>
+
+    <section class="summary-card">
+      <div class="shield-mark">A</div>
+      <div>
+        <strong id="siteLabel">This website</strong>
+        <span id="siteState">Protected</span>
+      </div>
+    </section>
+
+    <section class="stats" aria-label="Blocked items">
+      <div><strong id="popupCount">0</strong><span>Popups</span></div>
+      <div><strong id="overlayCount">0</strong><span>Overlays</span></div>
+      <div><strong id="tabCount">0</strong><span>Ad tabs</span></div>
+    </section>
+
+    <section class="controls">
+      <label class="row">
+        <span>
+          <strong>Strict popup shield</strong>
+          <small>Blocks unmatched tabs opened by page scripts.</small>
+        </span>
+        <input id="strictToggle" type="checkbox">
+      </label>
+
+      <button id="siteToggle" class="secondary" type="button">Disable on this site</button>
+      <button id="resetStats" class="ghost" type="button">Reset counters</button>
+    </section>
+
+    <footer>
+      <span class="dot"></span>
+      <span>Network blocking + player-safe click protection</span>
+    </footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
