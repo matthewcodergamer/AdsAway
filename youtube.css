@@ -1,0 +1,19 @@
+html:not([data-adsaway-disabled="true"]) #masthead-ad,
+html:not([data-adsaway-disabled="true"]) #player-ads,
+html:not([data-adsaway-disabled="true"]) ytd-ad-slot-renderer,
+html:not([data-adsaway-disabled="true"]) ytd-display-ad-renderer,
+html:not([data-adsaway-disabled="true"]) ytd-promoted-sparkles-web-renderer,
+html:not([data-adsaway-disabled="true"]) ytd-promoted-video-renderer,
+html:not([data-adsaway-disabled="true"]) ytd-in-feed-ad-layout-renderer,
+html:not([data-adsaway-disabled="true"]) ytd-action-companion-ad-renderer,
+html:not([data-adsaway-disabled="true"]) ytd-companion-slot-renderer,
+html:not([data-adsaway-disabled="true"]) ytd-video-masthead-ad-advertiser-info-renderer,
+html:not([data-adsaway-disabled="true"]) ytm-promoted-video-renderer,
+html:not([data-adsaway-disabled="true"]) .ytp-ad-overlay-container,
+html:not([data-adsaway-disabled="true"]) .ytp-ad-image-overlay,
+html:not([data-adsaway-disabled="true"]) .ytp-ad-player-overlay,
+html:not([data-adsaway-disabled="true"]) .ytp-ad-survey {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
