@@ -5,13 +5,70 @@ const DEFAULTS = {
 };
 
 const AD_HOSTS = new Set([
-  "doubleclick.net","googlesyndication.com","googleadservices.com","adservice.google.com",
-  "adnxs.com","adsrvr.org","amazon-adsystem.com","casalemedia.com","criteo.com","criteo.net",
-  "demdex.net","everesttech.net","moatads.com","openx.net","pubmatic.com","rubiconproject.com",
-  "scorecardresearch.com","smartadserver.com","taboola.com","outbrain.com","yieldmo.com","zedo.com",
-  "media.net","mgid.com","revcontent.com","propellerads.com","popads.net","popcash.net",
-  "exoclick.com","trafficjunky.net","juicyads.com","hilltopads.net","onclickalgo.com",
-  "adsterra.com","ad-maven.com","richads.com","monetag.com","clickadu.com","evadav.com"
+  "2mdn.net",
+  "a-ads.com",
+  "ad-maven.com",
+  "adform.net",
+  "adform.com",
+  "adnxs.com",
+  "adroll.com",
+  "adskeeper.co.uk",
+  "adsterra.com",
+  "adsrvr.org",
+  "adtechus.com",
+  "advertising.com",
+  "adxpremium.services",
+  "amazon-adsystem.com",
+  "bidswitch.net",
+  "bidvertiser.com",
+  "casalemedia.com",
+  "clickadu.com",
+  "clickaine.com",
+  "connatix.com",
+  "criteo.com",
+  "criteo.net",
+  "demdex.net",
+  "doubleclick.net",
+  "everesttech.net",
+  "evadav.com",
+  "exoclick.com",
+  "galaksion.com",
+  "googleadservices.com",
+  "googlesyndication.com",
+  "gumgum.com",
+  "highperformancecpm.com",
+  "highperformanceformat.com",
+  "hilltopads.com",
+  "hilltopads.net",
+  "indexexchange.com",
+  "juicyads.com",
+  "lijit.com",
+  "media.net",
+  "mgid.com",
+  "moatads.com",
+  "monetag.com",
+  "onclickalgo.com",
+  "onclickperformance.com",
+  "onclickprediction.com",
+  "openx.net",
+  "outbrain.com",
+  "popads.net",
+  "popcash.net",
+  "popmonetizer.net",
+  "propellerads.com",
+  "pubmatic.com",
+  "revcontent.com",
+  "richads.com",
+  "rubiconproject.com",
+  "scorecardresearch.com",
+  "sharethrough.com",
+  "smartadserver.com",
+  "spotxchange.com",
+  "taboola.com",
+  "teads.tv",
+  "trafficjunky.net",
+  "yieldmo.com",
+  "zedo.com"
 ]);
 
 const RESOURCE_TYPES = [
@@ -39,7 +96,8 @@ async function readSettings() {
   };
 }
 
-async function syncNetworkProtection(settings = await readSettings()) {
+async function syncNetworkProtection(settings) {
+  settings = settings || await readSettings();
   const enabled = settings.globalEnabled;
   const current = await chrome.declarativeNetRequest.getEnabledRulesets();
   const hasCore = current.includes("adsaway_core");
@@ -89,6 +147,19 @@ async function bump(tabId, kind, amount = 1) {
   await setTabStats(tabId, stats);
 }
 
+async function isProtectionActiveForTab(tabId) {
+  const settings = await readSettings();
+  if (!settings.globalEnabled) return false;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab?.url) return true;
+    const host = normalizeHost(new URL(tab.url).hostname);
+    return !settings.disabledSites.includes(host);
+  } catch {
+    return settings.globalEnabled;
+  }
+}
+
 function isKnownAdHost(urlString) {
   try {
     const host = normalizeHost(new URL(urlString).hostname);
@@ -124,7 +195,7 @@ chrome.tabs.onCreated.addListener(async (tab) => {
   pendingPopupTabs.set(tab.id, { openerTabId: tab.openerTabId, createdAt: Date.now() });
 
   const candidate = tab.pendingUrl || tab.url;
-  if (candidate && isKnownAdHost(candidate)) {
+  if (candidate && isKnownAdHost(candidate) && await isProtectionActiveForTab(tab.openerTabId)) {
     try {
       await chrome.tabs.remove(tab.id);
       await bump(tab.openerTabId, "suspiciousTabs");
@@ -141,7 +212,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     return;
   }
   const candidate = changeInfo.url || tab.pendingUrl || tab.url;
-  if (candidate && isKnownAdHost(candidate)) {
+  if (candidate && isKnownAdHost(candidate) && await isProtectionActiveForTab(pending.openerTabId)) {
     try {
       await chrome.tabs.remove(tabId);
       await bump(pending.openerTabId, "suspiciousTabs");
