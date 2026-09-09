@@ -21,20 +21,21 @@ jobs:
           node --check background.js
           node --check page-guard.js
           node --check content.js
+          node --check youtube.js
           node --check popup.js
 
       - name: Build ZIP
         run: |
           rm -rf dist
           mkdir -p dist/AdsAway
-          cp manifest.json background.js page-guard.js content.js content.css popup.html popup.css popup.js README.md LICENSE dist/AdsAway/
+          cp manifest.json background.js page-guard.js content.js content.css youtube.js youtube.css popup.html popup.css popup.js README.md LICENSE dist/AdsAway/
           cp -R icons rules dist/AdsAway/
           cd dist
-          zip -r AdsAway-Chrome-v1.0.0.zip AdsAway
+          zip -r AdsAway-Chrome-v1.1.0.zip AdsAway
 
       - name: Upload installable ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: AdsAway-Chrome-v1.0.0
-          path: dist/AdsAway-Chrome-v1.0.0.zip
+          name: AdsAway-Chrome-v1.1.0
+          path: dist/AdsAway-Chrome-v1.1.0.zip
           if-no-files-found: error
